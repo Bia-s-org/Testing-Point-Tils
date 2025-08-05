@@ -84,11 +84,11 @@ jobs:
           BUILD_ID=$(echo "$BUILD_JSON" | jq -r '.[0].id')
           BUILD_URL=$(echo "$BUILD_JSON" | jq -r '.[0].artifacts.buildUrl // "Not available"')
 
-          echo "build_id=${BUILD_ID}" >> $GITHUB_OUTPUT
-          echo "build_url=${BUILD_URL}" >> $GITHUB_OUTPUT
+          echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
+          echo "build_url=$BUILD_URL" >> "$GITHUB_OUTPUT" 
 
-          echo "BUILD_ID=${BUILD_ID}" >> $GITHUB_ENV
-          echo "BUILD_URL=${BUILD_URL}" >> $GITHUB_ENV
+          echo "BUILD_ID=$BUILD_ID" >> "$GITHUB_ENV"
+          echo "BUILD_URL=$BUILD_URL" >> "$GITHUB_ENV"
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
