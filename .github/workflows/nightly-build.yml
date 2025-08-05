@@ -227,7 +227,7 @@ jobs:
           - **Versão:** ${{ needs.build.outputs.nightly_version || 'N/A' }}
           - **Commit:** ${COMMIT_HASH}
           - **Descrição:** ${COMMIT_MSG}
-          - **Status:** ${{ needs.build.outputs.build_status || 'Unknown' }}
+          - **Status:** ${{ needs.build.outputs.build_status || 'Desconhecido' }}
 
           ## Informações da Build
           - **Build ID:** ${{ needs.build.outputs.build_id || 'N/A' }}
@@ -263,7 +263,7 @@ jobs:
             RESULT="FAILED"
           fi
 
-          BUILD_URL="${{ needs.build.outputs.build_url != 'Not available' && needs.build.outputs.build_url || 'Processando...' }}"
+          BUILD_URL="${{ needs.build.outputs.build_url != 'Not available' && needs.build.outputs.build_url || ' ' }}"
           LOGS_URL="${{ needs.build.result != 'success' && format('{0}/{1}/actions/runs/{2}', github.server_url, github.repository, github.run_id) || '' }}"
           COMMIT_HASH=$(git rev-parse --short HEAD)
 
