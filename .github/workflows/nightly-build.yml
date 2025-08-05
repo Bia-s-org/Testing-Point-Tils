@@ -2,90 +2,246 @@ name: Nightly Build
 
 on:
   schedule:
-    # Executa todos os dias às 3:00 AM UTC (00:00 BRT no horário de verão)
-    - cron: '0 3 * * *'
+    - cron: '0 3 * * *' # 3AM UTC (00:00 BRT no horário de verão)
   workflow_dispatch:
-    # Permite execução manual do workflow
+    inputs:
+      branch:
+        description: 'Branch to build'
+        required: false
+        default: 'main'
 
 jobs:
   nightly-build:
     name: Generate Nightly Android Build
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 45
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
+        with:
+          ref: ${{ github.event.inputs.branch || 'main' }}
+          fetch-depth: 0
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-          
-      - name: Setup Expo CLI
-        run: npm install -g @expo/cli eas-cli
-        
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        id: cache-dependencies
+        with:
+          path: |
+            node_modules
+            ~/.npm
+            ~/.cache
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
       - name: Install dependencies
         run: npm ci
-        
-      - name: Setup EAS credentials
+
+      - name: Setup Expo tools
+        run: npm install -g eas-cli@latest
+
+      - name: Verify EAS Authentication
         run: |
-          echo "${{ secrets.EXPO_TOKEN }}" | eas login --non-interactive
+          if ! eas whoami; then
+            exit 1
+          fi
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          
+
       - name: Generate nightly build
+        id: build-step
         run: |
-          # Atualiza versão com timestamp para builds nightly
-          TIMESTAMP=$(date +"%Y%m%d_%H%M")
-          CURRENT_VERSION=$(node -p "require('./package.json').version")
-          NIGHTLY_VERSION="${CURRENT_VERSION}-nightly.${TIMESTAMP}"
-          
-          # Atualiza version no app.json temporariamente
+          echo "🌙 Generating nightly build..."
+          ORIGINAL_VERSION=$(node -p "require('./package.json').version")
+          NIGHTLY_VERSION="${ORIGINAL_VERSION}-nightly.${TIMESTAMP}"
+
+          echo "original_version=${ORIGINAL_VERSION}" >> $GITHUB_OUTPUT
+          echo "nightly_version=${NIGHTLY_VERSION}" >> $GITHUB_OUTPUT
+          echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
+
+          # Backup original app.json
+          cp app.json app.json.backup
+
+          # Modify app.json for nightly build
           node -e "
             const fs = require('fs');
             const appJson = JSON.parse(fs.readFileSync('app.json', 'utf8'));
-            appJson.expo.version = '$NIGHTLY_VERSION';
-            appJson.expo.name = 'Point Tils (Nightly)';
-            appJson.expo.android.package = 'com.bialves.pointtils.nightly';
-            fs.writeFileSync('app.json', JSON.stringify(appJson, null, '\t'));
+            appJson.expo.version = '${NIGHTLY_VERSION}';
+            fs.writeFileSync('app.json', JSON.stringify(appJson, null, 2));
           "
-          
-          # Gera build de prévia para Android
-          eas build --profile preview --platform android --non-interactive --auto-submit-with-profile preview
+
+          echo "🚀 Starting build for version: ${NIGHTLY_VERSION}"
+
+          # Capture build ID and URL from JSON output
+          BUILD_JSON=$(eas build --platform android --profile preview --non-interactive --no-wait --json)
+          if [ -z "$BUILD_JSON" ]; then
+            echo "❌ Failed to start build. Please check your configuration."
+            exit 1
+          fi
+
+          BUILD_ID=$(echo "$BUILD_JSON" | jq -r '.[0].id')
+          echo "build_id=${BUILD_ID}" >> $GITHUB_OUTPUT
+          echo "BUILD_ID=${BUILD_ID}" >> $GITHUB_ENV
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          
+
+      - name: Wait for build completion
+        id: build-status
+        run: |
+          echo "⏳ Waiting for build to complete..."
+
+          # Wait time constants (in seconds)
+          MAX_QUEUE_WAIT=10800  # 3 hours max queue wait time
+          MAX_BUILD_TIME=2700   # 45 minutes max build time
+          POLL_INTERVAL=60      # Check every minute
+
+          # Initialize counters
+          QUEUE_TIME=0
+          BUILD_TIME=0
+
+          # First phase: Wait for build to exit the queue
+          echo "Phase 1: Waiting for build to exit the queue..."
+          while [ $QUEUE_TIME -lt $MAX_QUEUE_WAIT ]; do
+            BUILD_INFO=$(eas build:view $BUILD_ID --json)
+            if [ -z "$BUILD_INFO" ]; then
+              echo "❌ Failed to retrieve build information"
+              exit 1
+            fi
+
+            BUILD_STATUS=$(echo "$BUILD_INFO" | jq -r '.status')
+
+            # If the build is no longer in queue, proceed to next phase
+            if [ "$BUILD_STATUS" != "IN_QUEUE" ]; then
+              echo "✅ Build exited queue after $QUEUE_TIME seconds"
+              break
+            fi
+            
+            # Show estimated queue time remaining
+            QUEUE_POS=$(echo "$BUILD_INFO" | jq -r '.queuePosition // "unknown"')
+            WAIT_TIME=$(echo "$BUILD_INFO" | jq -r '.estimatedWaitTimeLeftSeconds // "unknown"')
+            echo "Queue position: $QUEUE_POS, Estimated wait: $WAIT_TIME seconds"
+            
+            sleep $POLL_INTERVAL
+            QUEUE_TIME=$((QUEUE_TIME + POLL_INTERVAL))
+          done
+
+          if [ $QUEUE_TIME -ge $MAX_QUEUE_WAIT ]; then
+            echo "⚠️ Queue wait time exceeded maximum ($MAX_QUEUE_WAIT seconds)"
+
+            # Cancel the build since it's taking too long in queue
+            eas build:cancel --id $BUILD_ID --non-interactive
+            
+            BUILD_STATUS="queue_timeout"
+            echo "build_status=${BUILD_STATUS}" >> $GITHUB_OUTPUT
+            echo "BUILD_STATUS=${BUILD_STATUS}" >> $GITHUB_ENV
+          else
+            # Second phase: Wait for build to complete
+            echo "Phase 2: Build in progress, waiting for completion..."
+            while [ $BUILD_TIME -lt $MAX_BUILD_TIME ]; do
+              BUILD_INFO=$(eas build:view $BUILD_ID --json)
+              if [ -z "$BUILD_INFO" ]; then
+                echo "❌ Failed to retrieve build information"
+                exit 1
+              fi
+              
+              BUILD_STATUS=$(echo "$BUILD_INFO" | jq -r '.status')
+              case "$BUILD_STATUS" in
+                "FINISHED"|"ERRORED"|"CANCELED"|"FAILED")
+                  echo "✅ Build process completed with status: $BUILD_STATUS after $BUILD_TIME seconds"
+                  break
+                  ;;
+              esac
+              
+              sleep $POLL_INTERVAL
+              BUILD_TIME=$((BUILD_TIME + POLL_INTERVAL))
+            done
+            
+            if [ $BUILD_TIME -ge $MAX_BUILD_TIME ]; then
+              BUILD_STATUS="build_timeout"
+            fi
+          fi
+
+          # Get final build URL
+          FINAL_URL=$(eas build:view $BUILD_ID --json | jq -r '.artifacts.buildUrl // .artifacts.applicationArchiveUrl // "Not available"')
+
+          echo "build_status=${BUILD_STATUS}" >> $GITHUB_OUTPUT
+          echo "build_url=${FINAL_URL}" >> $GITHUB_OUTPUT
+
+          echo "BUILD_STATUS=${BUILD_STATUS}" >> $GITHUB_ENV
+          echo "BUILD_URL=${FINAL_URL}" >> $GITHUB_ENV
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Restore app.json
+        if: always()
+        run: |
+          if [ -f app.json.backup ]; then
+            mv app.json.backup app.json
+            echo "✅ app.json restored"
+          fi
+
       - name: Create release notes
-        if: success()
+        if: always()
         run: |
-          TIMESTAMP=$(date +"%Y-%m-%d %H:%M UTC")
-          COMMIT_SHA=$(git rev-parse --short HEAD)
-          COMMIT_MSG=$(git log -1 --pretty=%B)
-          
+          COMMIT_HASH=$(git rev-parse --short HEAD)
+          COMMIT_MSG=$(git log -1 --pretty=%B | head -1)
+
           cat > release-notes.md << EOF
-          # 🌙 Nightly Build - ${TIMESTAMP}
-          
-          **Build:** Point Tils v$(node -p "require('./package.json').version")-nightly
-          **Commit:** ${COMMIT_SHA}
-          **Message:** ${COMMIT_MSG}
-          
-          ## 📱 Download
-          Check EAS dashboard for download link: https://expo.dev/accounts/bialves/projects/point-tils/builds
-          
-          ## ⚠️ Notice
-          This is an automated nightly build for testing purposes.
+          # 🌙 Nightly Build Report
+
+          - **Data:** $(date +"%d/%m/%Y %H:%M:%S")
+          - **Versão:** ${{ steps.build-step.outputs.nightly_version || 'N/A' }}
+          - **Commit:** ${COMMIT_HASH}\n
+          - **Descrição:** ${COMMIT_MSG}
+          - **Status:** ${{ env.BUILD_STATUS || 'Unknown' }}
+
+          ## Build Information
+          - **Build ID:** ${{ env.BUILD_ID || 'N/A' }}
+          - **Platform:** Android
+          - **Profile:** Preview
+
+          ### Links
+          - **Build URL:** ${{ env.BUILD_URL != 'Not available' && env.BUILD_URL || 'Não disponível' }}
+          - **EAS Dashboard:** [Ver builds](https://expo.dev/accounts/bialves/projects/point-tils/builds)
+
+          ---
+          _Gerado automaticamente pelo GitHub Actions_
           EOF
-          
+
       - name: Upload release notes
-        if: success()
         uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: nightly-release-notes
+          name: nightly-release-notes-${{ steps.build-step.outputs.timestamp }}
           path: release-notes.md
-          
-      - name: Notify on failure
-        if: failure()
+          retention-days: 15
+
+      - name: Send Discord notification
+        if: always()
         run: |
-          echo "❌ Nightly build failed at $(date)"
-          echo "Check the workflow logs for details."
+          if [ -z "${{ secrets.DISCORD_WEBHOOK }}" ]; then
+            echo "DISCORD_WEBHOOK not set, skipping Discord notification."
+            exit 0
+          fi
+
+          if [ "${{ job.status }}" = "success" ]; then
+            ICON="✅"
+            RESULT="SUCCESS"
+          else
+            ICON="❌"
+            RESULT="FAILED"
+          fi
+
+          BUILD_URL="${{ env.BUILD_URL != 'Not available' && env.BUILD_URL || 'Processando...' }}"
+          LOGS_URL="${{ job.status == 'failure' && format('{0}/{1}/actions/runs/{2}', github.server_url, github.repository, github.run_id) || '' }}"
+
+          curl -H "Content-Type: application/json" -X POST -d "{
+            \"content\": \"$ICON **Nightly Build $RESULT**\n\n📱 **Projeto:** Point Tils\n📊 **Status:** ${{ job.status }}\n🏷️ **Versão:** ${{ steps.build-step.outputs.nightly_version || 'N/A' }}\n🔗 **Commit:** $(git rev-parse --short HEAD)\n⚙️ **Artefato:** $BUILD_URL\n📝 **Logs:** $LOGS_URL\"
+          }" "${{ secrets.DISCORD_WEBHOOK }}"
