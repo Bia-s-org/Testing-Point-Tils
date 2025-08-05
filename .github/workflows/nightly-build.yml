@@ -86,7 +86,7 @@ jobs:
             exit 1
           fi
 
-          BUILD_ID=$(echo "$BUILD_JSON" | jq -r '.[0].id'
+          BUILD_ID=$(echo "$BUILD_JSON" | jq -r '.[0].id')
           echo "build_id=${BUILD_ID}" >> $GITHUB_OUTPUT
           echo "BUILD_ID=${BUILD_ID}" >> $GITHUB_ENV
         env:
@@ -125,8 +125,8 @@ jobs:
             fi
             
             # Show estimated queue time remaining
-            QUEUE_POS=$(echo "$BUILD_INFO" | jq -r '.queuePosition // "unknown"')
-            WAIT_TIME=$(echo "$BUILD_INFO" | jq -r '.estimatedWaitTimeLeftSeconds // "unknown"')
+            QUEUE_POS=$(echo "$BUILD_INFO" | jq -r '.[0].queuePosition // "unknown"')
+            WAIT_TIME=$(echo "$BUILD_INFO" | jq -r '.[0].estimatedWaitTimeLeftSeconds // "unknown"')
             echo "Queue position: $QUEUE_POS, Estimated wait: $WAIT_TIME seconds"
             
             sleep $POLL_INTERVAL
@@ -135,7 +135,13 @@ jobs:
 
           if [ $QUEUE_TIME -ge $MAX_QUEUE_WAIT ]; then
             echo "⚠️ Queue wait time exceeded maximum ($MAX_QUEUE_WAIT seconds)"
+
+            # Cancel the build since it's taking too long in queue
+            eas build:cancel --id $BUILD_ID --non-interactive
+            
             BUILD_STATUS="queue_timeout"
+            echo "build_status=${BUILD_STATUS}" >> $GITHUB_OUTPUT
+            echo "BUILD_STATUS=${BUILD_STATUS}" >> $GITHUB_ENV
           else
             # Second phase: Wait for build to complete
             echo "Phase 2: Build in progress, waiting for completion..."
@@ -146,12 +152,10 @@ jobs:
                 exit 1
               fi
               
-              BUILD_STATUS=$(echo "$BUILD_INFO" | jq -r '.status')
-              echo "Current status: $BUILD_STATUS"
-              
+              BUILD_STATUS=$(echo "$BUILD_INFO" | jq -r '.[0].status')
               case "$BUILD_STATUS" in
                 "FINISHED"|"ERRORED"|"CANCELED"|"FAILED")
-                  echo "Build process completed with status: $BUILD_STATUS after $BUILD_TIME seconds"
+                  echo "✅ Build process completed with status: $BUILD_STATUS after $BUILD_TIME seconds"
                   break
                   ;;
               esac
@@ -166,7 +170,7 @@ jobs:
           fi
 
           # Get final build URL
-          FINAL_URL=$(eas build:view $BUILD_ID --json | jq -r '.[0].artifacts.buildUrl // "Not available"')
+          FINAL_URL=$(eas build:view $BUILD_ID --json | jq -r '.[0].artifacts.buildUrl // .[0].artifacts.applicationArchiveUrl // "Not available"')
 
           echo "build_status=${BUILD_STATUS}" >> $GITHUB_OUTPUT
           echo "build_url=${FINAL_URL}" >> $GITHUB_OUTPUT
@@ -187,7 +191,6 @@ jobs:
       - name: Create release notes
         if: always()
         run: |
-          TIMESTAMP=$(date +"%Y-%m-%d %H:%M %Z")
           COMMIT_HASH=$(git rev-parse --short HEAD)
           COMMIT_MSG=$(git log -1 --pretty=%B | head -1)
 
