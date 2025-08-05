@@ -227,7 +227,7 @@ jobs:
           - **Versão:** ${{ needs.build.outputs.nightly_version || 'N/A' }}
           - **Commit:** ${COMMIT_HASH}
           - **Descrição:** ${COMMIT_MSG}
-          - **Status:** ${{ needs.build.outputs.build_status || 'Desconhecido' }}
+          - **Status:** ${{ needs.build.outputs.build_status || needs.build.result }}
 
           ## Informações da Build
           - **Build ID:** ${{ needs.build.outputs.build_id || 'N/A' }}
