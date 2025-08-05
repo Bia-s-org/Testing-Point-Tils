@@ -88,13 +88,9 @@ jobs:
           echo "--- End of BUILD_JSON ---"
 
           BUILD_ID=$(echo "$BUILD_JSON" | jq -r '.[0].id')
-          BUILD_URL=$(echo "$BUILD_JSON" | jq -r '.[0].artifacts.buildUrl // "Not available"')
 
           echo "build_id=${BUILD_ID}" >> $GITHUB_OUTPUT
-          echo "build_url=${BUILD_URL}" >> $GITHUB_OUTPUT
-
           echo "BUILD_ID=${BUILD_ID}" >> $GITHUB_ENV
-          echo "BUILD_URL=${BUILD_URL}" >> $GITHUB_ENV
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
@@ -107,11 +103,17 @@ jobs:
           POLL_INTERVAL=60 # 1 minute
           ELAPSED_TIME=0
 
-          # Use captured build ID
-          BUILD_ID="${{ env.BUILD_ID }}"
+          # Usa a variável de ambiente já disponível
+          echo "Checking build status for BUILD_ID: $BUILD_ID"
 
           while [ $ELAPSED_TIME -lt $MAX_WAIT_TIME ]; do
             BUILD_INFO=$(eas build:view $BUILD_ID --non-interactive --json)
+            
+            # Debug: Print the raw JSON response
+            echo "📋 Raw BUILD_INFO response:"
+            echo "$BUILD_INFO"
+            echo "--- End of BUILD_INFO ---"
+            
             BUILD_STATUS=$(echo "$BUILD_INFO" | jq -r '.status')
             
             case "$BUILD_STATUS" in
