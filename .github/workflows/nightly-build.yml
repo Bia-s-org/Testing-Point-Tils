@@ -11,10 +11,17 @@ on:
         default: 'main'
 
 jobs:
-  nightly-build:
+  build:
     name: Generate Nightly Android Build
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    outputs:
+      build_id: ${{ steps.build-step.outputs.build_id }}
+      build_status: ${{ steps.build-status.outputs.build_status }}
+      build_url: ${{ steps.build-status.outputs.build_url }}
+      nightly_version: ${{ steps.build-step.outputs.nightly_version }}
+      original_version: ${{ steps.build-step.outputs.original_version }}
+      timestamp: ${{ steps.build-step.outputs.timestamp }}
 
     steps:
       - name: Checkout code
@@ -97,6 +104,7 @@ jobs:
         run: |
           echo "⏳ Waiting for build to complete..."
 
+          echo "::group::"
           # Wait time constants (in seconds)
           MAX_QUEUE_WAIT=10800  # 3 hours max queue wait time
           MAX_BUILD_TIME=2700   # 45 minutes max build time
@@ -167,6 +175,7 @@ jobs:
               BUILD_STATUS="build_timeout"
             fi
           fi
+          echo "::endgroup::"
 
           # Get final build URL
           FINAL_URL=$(eas build:view $BUILD_ID --json | jq -r '.artifacts.buildUrl // .artifacts.applicationArchiveUrl // "Not available"')
@@ -187,51 +196,66 @@ jobs:
             echo "✅ app.json restored"
           fi
 
-      - name: Create release notes
+      - name: Save commit info
+        id: commit-info
         if: always()
+        run: |
+          echo "commit_hash=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "commit_msg=$(git log -1 --pretty=%B | head -1)" >> $GITHUB_OUTPUT
+
+  create-release-notes:
+    name: Generate Build Summary
+    runs-on: ubuntu-latest
+    needs: build
+    if: always()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || 'main' }}
+
+      - name: Create build summary
         run: |
           COMMIT_HASH=$(git rev-parse --short HEAD)
           COMMIT_MSG=$(git log -1 --pretty=%B | head -1)
 
-          cat > release-notes.md << EOF
+          # Write to GitHub step summary
+          cat << EOF >> $GITHUB_STEP_SUMMARY
           # 🌙 Nightly Build Report
 
           - **Data:** $(date +"%d/%m/%Y %H:%M:%S")
-          - **Versão:** ${{ steps.build-step.outputs.nightly_version || 'N/A' }}
-          - **Commit:** ${COMMIT_HASH}\n
+          - **Versão:** ${{ needs.build.outputs.nightly_version || 'N/A' }}
+          - **Commit:** ${COMMIT_HASH}
           - **Descrição:** ${COMMIT_MSG}
-          - **Status:** ${{ env.BUILD_STATUS || 'Unknown' }}
+          - **Status:** ${{ needs.build.outputs.build_status || needs.build.result }}
 
-          ## Build Information
-          - **Build ID:** ${{ env.BUILD_ID || 'N/A' }}
-          - **Platform:** Android
-          - **Profile:** Preview
+          ## Informações da Build
+          - **Build ID:** ${{ needs.build.outputs.build_id || 'N/A' }}
+          - **Plataforma:** Android
+          - **Perfil:** Preview
 
           ### Links
-          - **Build URL:** ${{ env.BUILD_URL != 'Not available' && env.BUILD_URL || 'Não disponível' }}
+          - **Build URL:** ${{ needs.build.outputs.build_url != 'Not available' && needs.build.outputs.build_url || 'Não disponível' }}
           - **EAS Dashboard:** [Ver builds](https://expo.dev/accounts/bialves/projects/point-tils/builds)
 
           ---
           _Gerado automaticamente pelo GitHub Actions_
           EOF
 
-      - name: Upload release notes
-        uses: actions/upload-artifact@v4
-        if: always()
+  send-notification:
+    name: Send Discord Notification
+    runs-on: ubuntu-latest
+    needs: build
+    if: always()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
-          name: nightly-release-notes-${{ steps.build-step.outputs.timestamp }}
-          path: release-notes.md
-          retention-days: 15
+          ref: ${{ github.event.inputs.branch || 'main' }}
 
       - name: Send Discord notification
-        if: always()
         run: |
-          if [ -z "${{ secrets.DISCORD_WEBHOOK }}" ]; then
-            echo "DISCORD_WEBHOOK not set, skipping Discord notification."
-            exit 0
-          fi
-
-          if [ "${{ job.status }}" = "success" ]; then
+          if [ "${{ needs.build.result }}" = "success" ]; then
             ICON="✅"
             RESULT="SUCCESS"
           else
@@ -239,9 +263,10 @@ jobs:
             RESULT="FAILED"
           fi
 
-          BUILD_URL="${{ env.BUILD_URL != 'Not available' && env.BUILD_URL || 'Processando...' }}"
-          LOGS_URL="${{ job.status == 'failure' && format('{0}/{1}/actions/runs/{2}', github.server_url, github.repository, github.run_id) || '' }}"
+          BUILD_URL="${{ needs.build.outputs.build_url != 'Not available' && needs.build.outputs.build_url || ' ' }}"
+          LOGS_URL="${{ needs.build.result != 'success' && format('{0}/{1}/actions/runs/{2}', github.server_url, github.repository, github.run_id) || '' }}"
+          COMMIT_HASH=$(git rev-parse --short HEAD)
 
           curl -H "Content-Type: application/json" -X POST -d "{
-            \"content\": \"$ICON **Nightly Build $RESULT**\n\n📱 **Projeto:** Point Tils\n📊 **Status:** ${{ job.status }}\n🏷️ **Versão:** ${{ steps.build-step.outputs.nightly_version || 'N/A' }}\n🔗 **Commit:** $(git rev-parse --short HEAD)\n⚙️ **Artefato:** $BUILD_URL\n📝 **Logs:** $LOGS_URL\"
+            \"content\": \"$ICON **Nightly Build $RESULT**\n\n📱 **Projeto:** Point Tils\n📊 **Status:** ${{ needs.build.result }}\n🏷️ **Versão:** ${{ needs.build.outputs.nightly_version || 'N/A' }}\n🔗 **Commit:** $COMMIT_HASH\n⚙️ **Artefato:** $BUILD_URL\n📝 **Logs:** $LOGS_URL\"
           }" "${{ secrets.DISCORD_WEBHOOK }}"
