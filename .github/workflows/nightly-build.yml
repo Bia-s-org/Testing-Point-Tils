@@ -20,7 +20,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.branch || 'main' }}
+          ref: ${{ github.event.inputs.branch || 'main' }} # Use the branch from workflow dispatch or default to main
           fetch-depth: 0
 
       - name: Setup Node.js
@@ -90,18 +90,38 @@ jobs:
         id: build-status
         run: |
           echo "⏳ Waiting for build to complete..."
-          sleep 60
-
-          # Get latest build info
-          BUILD_INFO=$(eas build:list --non-interactive --limit 1 --json)
-          BUILD_STATUS=$(echo "$BUILD_INFO" | jq -r '.[0].status')
-          BUILD_URL=$(echo "$BUILD_INFO" | jq -r '.[0].buildUrl // "Not available"')
-          BUILD_ID=$(echo "$BUILD_INFO" | jq -r '.[0].id')
-
+          
+          MAX_WAIT_TIME=1800  # 30 minutes
+          POLL_INTERVAL=60    # 1 minute
+          ELAPSED_TIME=0
+          
+          # Initial wait for build to register
+          sleep 30
+          
+          while [ $ELAPSED_TIME -lt $MAX_WAIT_TIME ]; do
+            BUILD_INFO=$(eas build:list --non-interactive --limit 1 --json)
+            BUILD_STATUS=$(echo "$BUILD_INFO" | jq -r '.[0].status')
+            BUILD_URL=$(echo "$BUILD_INFO" | jq -r '.[0].buildUrl // "Not available"')
+            BUILD_ID=$(echo "$BUILD_INFO" | jq -r '.[0].id')
+            
+            case "$BUILD_STATUS" in
+              "finished"|"errored"|"canceled"|"failed")
+                break
+                ;;
+            esac
+            
+            sleep $POLL_INTERVAL
+            ELAPSED_TIME=$((ELAPSED_TIME + POLL_INTERVAL))
+          done
+          
+          if [ $ELAPSED_TIME -ge $MAX_WAIT_TIME ]; then
+            BUILD_STATUS="timeout"
+          fi
+          
           echo "build_status=${BUILD_STATUS}" >> $GITHUB_OUTPUT
           echo "build_url=${BUILD_URL}" >> $GITHUB_OUTPUT
           echo "build_id=${BUILD_ID}" >> $GITHUB_OUTPUT
-
+          
           echo "BUILD_STATUS=${BUILD_STATUS}" >> $GITHUB_ENV
           echo "BUILD_URL=${BUILD_URL}" >> $GITHUB_ENV
           echo "BUILD_ID=${BUILD_ID}" >> $GITHUB_ENV
@@ -171,17 +191,14 @@ jobs:
             nicon="✅"
             nresult="SUCCESS"
           fi
-          message="$nicon **Nightly Build $nresult**
 
-          📱 **Projeto:** Point Tils
-          📊 **Status:** $nstatus
-          🏷️ **Versão:** $nversion
-          🔗 **Commit:** $ncommit
+          cat > discord_message.json << EOF
+          {
+            "content": "$nicon **Nightly Build $nresult**\\n\\n📱 **Projeto:** Point Tils\\n📊 **Status:** $nstatus\\n🏷️ **Versão:** $nversion\\n🔗 **Commit:** $ncommit\\n\\n🔗 **Build:** $nbuildurl\\n\\n$nlogs"
+          }
+          EOF
 
-          🔗 **Build:** $nbuildurl
-
-          $nlogs"
-          curl -H "Content-Type: application/json" -X POST -d "{\"content\": \"$message\"}" "${{ secrets.DISCORD_WEBHOOK }}"
+          curl -H "Content-Type: application/json" -X POST -d @discord_message.json "${{ secrets.DISCORD_WEBHOOK }}"
 
       - name: Summary
         if: always()
