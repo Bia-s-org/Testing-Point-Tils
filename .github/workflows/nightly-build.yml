@@ -196,18 +196,18 @@ jobs:
           cat > release-notes.md << EOF
           # 🌙 Nightly Build Report
 
-          **Data:** ${TIMESTAMP}
-          **Versão:** ${{ steps.build-step.outputs.nightly_version || 'N/A' }}
-          **Commit:** ${COMMIT_HASH}
-          **Mensagem:** ${COMMIT_MSG}
-          **Status:** ${{ env.BUILD_STATUS || 'Unknown' }}
+          - **Data:** $(date +"%d/%m/%Y %H:%M:%S")
+          - **Versão:** ${{ steps.build-step.outputs.nightly_version || 'N/A' }}
+          - **Commit:** ${COMMIT_HASH}\n
+          - **Descrição:** ${COMMIT_MSG}
+          - **Status:** ${{ env.BUILD_STATUS || 'Unknown' }}
 
           ## Build Information
           - **Build ID:** ${{ env.BUILD_ID || 'N/A' }}
           - **Platform:** Android
           - **Profile:** Preview
 
-          ## Links
+          ### Links
           - **Build URL:** ${{ env.BUILD_URL != 'Not available' && env.BUILD_URL || 'Não disponível' }}
           - **EAS Dashboard:** [Ver builds](https://expo.dev/accounts/bialves/projects/point-tils/builds)
 
@@ -243,5 +243,5 @@ jobs:
           LOGS_URL="${{ job.status == 'failure' && format('{0}/{1}/actions/runs/{2}', github.server_url, github.repository, github.run_id) || '' }}"
 
           curl -H "Content-Type: application/json" -X POST -d "{
-            \"content\": \"$ICON **Nightly Build $RESULT**\n\n📱 **Projeto:** Point Tils\n📊 **Status:** ${{ job.status }}\n🏷️ **Versão:** ${{ steps.build-step.outputs.nightly_version || 'N/A' }}\n🔗 **Commit:** $(git rev-parse --short HEAD)\n🔗 **Build:** $BUILD_URL\n📝 **Logs:** $LOGS_URL\"
+            \"content\": \"$ICON **Nightly Build $RESULT**\n\n📱 **Projeto:** Point Tils\n📊 **Status:** ${{ job.status }}\n🏷️ **Versão:** ${{ steps.build-step.outputs.nightly_version || 'N/A' }}\n🔗 **Commit:** $(git rev-parse --short HEAD)\n⚙️ **Artefato:** $BUILD_URL\n📝 **Logs:** $LOGS_URL\"
           }" "${{ secrets.DISCORD_WEBHOOK }}"
