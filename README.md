@@ -18,12 +18,14 @@ Antes de começar, você precisa ter instalado:
 - **Git**
 
 ### Para desenvolvimento:
+
 - **Expo Go** (para emulador Android ou iOS)
 - **Xcode** (para simulador iOS - apenas macOS)
 
 ## 🛠️ Desenvolvimento
 
 1. **Instale as dependências**
+
    ```bash
    cd point-tils
    npm install
@@ -37,9 +39,9 @@ Antes de começar, você precisa ter instalado:
 
 ### 🔧 Desenvolvimento Local
 
-| Comando | Descrição |
-|---------|-----------|
-| `npm start` | Inicia o servidor de desenvolvimento |
+| Comando        | Descrição                              |
+| -------------- | -------------------------------------- |
+| `npm start`    | Inicia o servidor de desenvolvimento   |
 | `npm run lint` | Executa verificação de código (ESLint) |
 
 > #### Testando
@@ -49,12 +51,12 @@ Antes de começar, você precisa ter instalado:
 
 ### 🏗️ Build (Geração de artefatos)
 
-| Comando | Plataforma | Descrição |
-|---------|------------|-----------|
-| `npm run build:dev` | Android + iOS | Build desenvolvimento para ambas plataformas |
-| `npm run build:preview` | Android + iOS | Build preview/teste para ambas plataformas |
-| `npm run build:android` | Android | Build apenas para Android (APK) |
-| `npm run build:ios` | iOS | Build apenas para iOS (IPA) |
+| Comando                 | Plataforma    | Descrição                                    |
+| ----------------------- | ------------- | -------------------------------------------- |
+| `npm run build:dev`     | Android + iOS | Build desenvolvimento para ambas plataformas |
+| `npm run build:preview` | Android + iOS | Build preview/teste para ambas plataformas   |
+| `npm run build:android` | Android       | Build apenas para Android (APK)              |
+| `npm run build:ios`     | iOS           | Build apenas para iOS (IPA)                  |
 
 > #### Artifacts Gerados
 >
@@ -63,10 +65,10 @@ Antes de começar, você precisa ter instalado:
 
 ## 💰 **Custos**
 
-| Ação | iOS | Android |
-|------|-----|---------|
-| **Expo Go (desenvolvimento)** | ✅ Gratuito | ✅ Gratuito |
-| **Build** (gerar IPA/APK) | ❌ $99/ano | ✅ Gratuito |
-| **Deploy** (TestFlight/App Store) | ❌ $99/ano | ✅ Gratuito ($25 Play Store) |
+| Ação                              | iOS         | Android                      |
+| --------------------------------- | ----------- | ---------------------------- |
+| **Expo Go (desenvolvimento)**     | ✅ Gratuito | ✅ Gratuito                  |
+| **Build** (gerar IPA/APK)         | ❌ $99/ano  | ✅ Gratuito                  |
+| **Deploy** (TestFlight/App Store) | ❌ $99/ano  | ✅ Gratuito ($25 Play Store) |
 
 > **⚠️ Importante:** Para iOS, até builds de development precisam de Apple Developer Account

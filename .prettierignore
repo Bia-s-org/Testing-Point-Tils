@@ -1,0 +1,18 @@
+# Prettier ignore patterns
+node_modules/
+.expo/
+dist/
+web-build/
+coverage/
+*.log
+.git/
+.vscode/
+.idea/
+*.lock
+yarn.lock
+package-lock.json
+CHANGELOG.md
+LICENSE
+.expo/
+android/
+ios/
