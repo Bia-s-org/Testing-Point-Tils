@@ -2,90 +2,195 @@ name: Nightly Build
 
 on:
   schedule:
-    # Executa todos os dias às 3:00 AM UTC (00:00 BRT no horário de verão)
-    - cron: '0 3 * * *'
+    - cron: '0 3 * * *' # 3AM UTC (00:00 BRT no horário de verão)
   workflow_dispatch:
-    # Permite execução manual do workflow
+    inputs:
+      branch:
+        description: 'Branch to build'
+        required: false
+        default: 'main'
 
 jobs:
   nightly-build:
     name: Generate Nightly Android Build
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 45
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
+        with:
+          ref: ${{ github.event.inputs.branch || 'main' }}
+          fetch-depth: 0
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-          
-      - name: Setup Expo CLI
-        run: npm install -g @expo/cli eas-cli
-        
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        id: cache-dependencies
+        with:
+          path: |
+            node_modules
+            ~/.npm
+            ~/.cache
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
       - name: Install dependencies
         run: npm ci
-        
-      - name: Setup EAS credentials
+
+      - name: Setup Expo tools
+        run: npm install -g eas-cli@latest
+
+      - name: Verify EAS Authentication
         run: |
-          echo "${{ secrets.EXPO_TOKEN }}" | eas login --non-interactive
+          if ! eas whoami; then
+            echo "❌ EAS authentication failed"
+            exit 1
+          fi
+          echo "✅ EAS authentication successful"
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          
+
       - name: Generate nightly build
+        id: build-step
         run: |
-          # Atualiza versão com timestamp para builds nightly
           TIMESTAMP=$(date +"%Y%m%d_%H%M")
-          CURRENT_VERSION=$(node -p "require('./package.json').version")
-          NIGHTLY_VERSION="${CURRENT_VERSION}-nightly.${TIMESTAMP}"
-          
-          # Atualiza version no app.json temporariamente
+          ORIGINAL_VERSION=$(node -p "require('./package.json').version")
+          NIGHTLY_VERSION="${ORIGINAL_VERSION}-nightly.${TIMESTAMP}"
+
+          echo "original_version=${ORIGINAL_VERSION}" >> $GITHUB_OUTPUT
+          echo "nightly_version=${NIGHTLY_VERSION}" >> $GITHUB_OUTPUT
+          echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
+
+          # Backup original app.json
+          cp app.json app.json.backup
+
+          # Modify app.json for nightly build
           node -e "
             const fs = require('fs');
             const appJson = JSON.parse(fs.readFileSync('app.json', 'utf8'));
-            appJson.expo.version = '$NIGHTLY_VERSION';
+            appJson.expo.version = '${NIGHTLY_VERSION}';
             appJson.expo.name = 'Point Tils (Nightly)';
             appJson.expo.android.package = 'com.bialves.pointtils.nightly';
-            fs.writeFileSync('app.json', JSON.stringify(appJson, null, '\t'));
+            fs.writeFileSync('app.json', JSON.stringify(appJson, null, 2));
           "
-          
-          # Gera build de prévia para Android
-          eas build --profile preview --platform android --non-interactive --auto-submit-with-profile preview
+
+          echo "🚀 Starting build for version: ${NIGHTLY_VERSION}"
+          eas build --platform android --profile preview --non-interactive --no-wait
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          
+
+      - name: Wait for build completion
+        id: build-status
+        run: |
+          echo "⏳ Waiting for build to complete..."
+          sleep 60
+
+          # Get latest build info
+          BUILD_INFO=$(eas build:list --non-interactive --limit 1 --json)
+          BUILD_STATUS=$(echo "$BUILD_INFO" | jq -r '.[0].status')
+          BUILD_URL=$(echo "$BUILD_INFO" | jq -r '.[0].buildUrl // "Not available"')
+          BUILD_ID=$(echo "$BUILD_INFO" | jq -r '.[0].id')
+
+          echo "build_status=${BUILD_STATUS}" >> $GITHUB_OUTPUT
+          echo "build_url=${BUILD_URL}" >> $GITHUB_OUTPUT
+          echo "build_id=${BUILD_ID}" >> $GITHUB_OUTPUT
+
+          echo "BUILD_STATUS=${BUILD_STATUS}" >> $GITHUB_ENV
+          echo "BUILD_URL=${BUILD_URL}" >> $GITHUB_ENV
+          echo "BUILD_ID=${BUILD_ID}" >> $GITHUB_ENV
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Restore app.json
+        if: always()
+        run: |
+          if [ -f app.json.backup ]; then
+            mv app.json.backup app.json
+            echo "✅ app.json restored"
+          fi
+
       - name: Create release notes
-        if: success()
+        if: always()
         run: |
-          TIMESTAMP=$(date +"%Y-%m-%d %H:%M UTC")
-          COMMIT_SHA=$(git rev-parse --short HEAD)
-          COMMIT_MSG=$(git log -1 --pretty=%B)
-          
+          TIMESTAMP=$(date +"%Y-%m-%d %H:%M %Z")
+          COMMIT_HASH=$(git rev-parse --short HEAD)
+          COMMIT_MSG=$(git log -1 --pretty=%B | head -1)
+
           cat > release-notes.md << EOF
-          # 🌙 Nightly Build - ${TIMESTAMP}
-          
-          **Build:** Point Tils v$(node -p "require('./package.json').version")-nightly
-          **Commit:** ${COMMIT_SHA}
-          **Message:** ${COMMIT_MSG}
-          
-          ## 📱 Download
-          Check EAS dashboard for download link: https://expo.dev/accounts/bialves/projects/point-tils/builds
-          
-          ## ⚠️ Notice
-          This is an automated nightly build for testing purposes.
+          # 🌙 Nightly Build Report
+
+          **Data:** ${TIMESTAMP}
+          **Versão:** ${{ steps.build-step.outputs.nightly_version || 'N/A' }}
+          **Commit:** ${COMMIT_HASH}
+          **Mensagem:** ${COMMIT_MSG}
+          **Status:** ${{ env.BUILD_STATUS || 'Unknown' }}
+
+          ## Build Information
+          - **Build ID:** ${{ env.BUILD_ID || 'N/A' }}
+          - **Platform:** Android
+          - **Profile:** Preview
+
+          ## Links
+          - **Build URL:** ${{ env.BUILD_URL != 'Not available' && env.BUILD_URL || 'Não disponível' }}
+          - **EAS Dashboard:** [Ver builds](https://expo.dev/accounts/bialves/projects/point-tils/builds)
+
+          ---
+          _Gerado automaticamente pelo GitHub Actions_
           EOF
-          
+
       - name: Upload release notes
-        if: success()
         uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: nightly-release-notes
+          name: nightly-release-notes-${{ steps.build-step.outputs.timestamp }}
           path: release-notes.md
-          
-      - name: Notify on failure
-        if: failure()
+          retention-days: 30
+
+      - name: Send Discord notification
+        if: always()
         run: |
-          echo "❌ Nightly build failed at $(date)"
-          echo "Check the workflow logs for details."
+          if [ -z "${{ secrets.DISCORD_WEBHOOK }}" ]; then
+            echo "DISCORD_WEBHOOK not set, skipping Discord notification."
+            exit 0
+          fi
+          nstatus="${{ job.status }}"
+          nversion="${{ steps.build-step.outputs.nightly_version || 'N/A' }}"
+          ncommit="${{ github.sha }}"
+          nbuildurl="${{ env.BUILD_URL != 'Not available' && env.BUILD_URL || 'Processando...' }}"
+          nlogs="${{ job.status == 'failure' && format('📝 **Logs:** {0}/{1}/actions/runs/{2}', github.server_url, github.repository, github.run_id) || '' }}"
+          nicon="❌"
+          nresult="FAILED"
+          if [ "$nstatus" = "success" ]; then
+            nicon="✅"
+            nresult="SUCCESS"
+          fi
+          message="$nicon **Nightly Build $nresult**
+
+          📱 **Projeto:** Point Tils
+          📊 **Status:** $nstatus
+          🏷️ **Versão:** $nversion
+          🔗 **Commit:** $ncommit
+
+          🔗 **Build:** $nbuildurl
+
+          $nlogs"
+          curl -H "Content-Type: application/json" -X POST -d "{\"content\": \"$message\"}" "${{ secrets.DISCORD_WEBHOOK }}"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## 🌙 Nightly Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Status | ${{ job.status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ steps.build-step.outputs.nightly_version || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Status | ${{ env.BUILD_STATUS || 'Unknown' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build URL | ${{ env.BUILD_URL != 'Not available' && env.BUILD_URL || 'Processing...' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Timestamp | $(date) |" >> $GITHUB_STEP_SUMMARY
