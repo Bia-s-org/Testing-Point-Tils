@@ -118,7 +118,7 @@ jobs:
         run: npm ci
 
       - name: Run Expo Doctor
-        run: npx expo doctor
+        run: npx expo-doctor
 
   dependency-analysis:
     name: Dependency Analysis

@@ -52,12 +52,14 @@ Este repositório implementa um pipeline robusto de CI/CD para garantir a qualid
 ## 🤖 PR Agent Features
 
 ### Revisão Automática:
+
 - Análise de qualidade do código
 - Detecção de possíveis bugs
 - Verificação de boas práticas
 - Sugestões de otimização
 
 ### Descrição Automática:
+
 - Geração de descrição baseada nas mudanças
 - Listagem de funcionalidades adicionadas
 - Documentação automática de breaking changes
@@ -65,6 +67,7 @@ Este repositório implementa um pipeline robusto de CI/CD para garantir a qualid
 ## 🌙 Nightly Build
 
 ### Workflow Automático:
+
 - ⏰ Executa todo dia às 3h UTC
 - 🔍 Verifica vulnerabilidades de segurança
 - 📈 Gera relatórios de dependências desatualizadas
@@ -72,6 +75,7 @@ Este repositório implementa um pipeline robusto de CI/CD para garantir a qualid
 - 📊 Monitora a saúde geral do projeto
 
 ### Benefícios:
+
 - Detecção precoce de problemas de segurança
 - Manutenção automática de dependências
 - Prevenção de acúmulo de dívida técnica
