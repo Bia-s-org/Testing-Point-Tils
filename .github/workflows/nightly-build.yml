@@ -115,8 +115,7 @@ jobs:
               exit 1
             fi
 
-            BUILD_STATUS=$(echo "$BUILD_INFO" | jq -r '.status')
-            echo "Current status: $BUILD_STATUS"
+            BUILD_STATUS=$(echo "$BUILD_INFO" | jq -r '.[0].status')
             
             # If the build is no longer in queue, proceed to next phase
             if [ "$BUILD_STATUS" != "IN_QUEUE" ]; then
