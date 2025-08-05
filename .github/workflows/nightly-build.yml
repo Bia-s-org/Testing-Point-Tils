@@ -1,0 +1,91 @@
+name: Nightly Build
+
+on:
+  schedule:
+    # Executa todos os dias às 3:00 AM UTC (00:00 BRT no horário de verão)
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    # Permite execução manual do workflow
+
+jobs:
+  nightly-build:
+    name: Generate Nightly Android Build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          
+      - name: Setup Expo CLI
+        run: npm install -g @expo/cli eas-cli
+        
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Setup EAS credentials
+        run: |
+          echo "${{ secrets.EXPO_TOKEN }}" | eas login --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          
+      - name: Generate nightly build
+        run: |
+          # Atualiza versão com timestamp para builds nightly
+          TIMESTAMP=$(date +"%Y%m%d_%H%M")
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          NIGHTLY_VERSION="${CURRENT_VERSION}-nightly.${TIMESTAMP}"
+          
+          # Atualiza version no app.json temporariamente
+          node -e "
+            const fs = require('fs');
+            const appJson = JSON.parse(fs.readFileSync('app.json', 'utf8'));
+            appJson.expo.version = '$NIGHTLY_VERSION';
+            appJson.expo.name = 'Point Tils (Nightly)';
+            appJson.expo.android.package = 'com.bialves.pointtils.nightly';
+            fs.writeFileSync('app.json', JSON.stringify(appJson, null, '\t'));
+          "
+          
+          # Gera build de prévia para Android
+          eas build --profile preview --platform android --non-interactive --auto-submit-with-profile preview
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          
+      - name: Create release notes
+        if: success()
+        run: |
+          TIMESTAMP=$(date +"%Y-%m-%d %H:%M UTC")
+          COMMIT_SHA=$(git rev-parse --short HEAD)
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          
+          cat > release-notes.md << EOF
+          # 🌙 Nightly Build - ${TIMESTAMP}
+          
+          **Build:** Point Tils v$(node -p "require('./package.json').version")-nightly
+          **Commit:** ${COMMIT_SHA}
+          **Message:** ${COMMIT_MSG}
+          
+          ## 📱 Download
+          Check EAS dashboard for download link: https://expo.dev/accounts/bialves/projects/point-tils/builds
+          
+          ## ⚠️ Notice
+          This is an automated nightly build for testing purposes.
+          EOF
+          
+      - name: Upload release notes
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-release-notes
+          path: release-notes.md
+          
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Nightly build failed at $(date)"
+          echo "Check the workflow logs for details."

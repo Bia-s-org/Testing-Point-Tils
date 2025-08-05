@@ -3,5 +3,18 @@
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
+  },
+  "editor.insertSpaces": false,
+  "editor.tabSize": 2,
+  "editor.detectIndentation": false,
+  "prettier.useTabs": true,
+  "prettier.tabWidth": 2,
+  "[json]": {
+    "editor.insertSpaces": false,
+    "editor.tabSize": 2
+  },
+  "[jsonc]": {
+    "editor.insertSpaces": false,
+    "editor.tabSize": 2
   }
 }
