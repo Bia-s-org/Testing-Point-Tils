@@ -58,7 +58,7 @@ jobs:
       - name: Generate nightly build
         id: build-step
         run: |
-          TIMESTAMP=$(date +"%Y%m%d_%H%M")
+          echo "🌙 Generating nightly build..."
           ORIGINAL_VERSION=$(node -p "require('./package.json').version")
           NIGHTLY_VERSION="${ORIGINAL_VERSION}-nightly.${TIMESTAMP}"
 
@@ -81,14 +81,12 @@ jobs:
 
           # Capture build ID and URL from JSON output
           BUILD_JSON=$(eas build --platform android --profile preview --non-interactive --no-wait --json)
-          
-          # Debug: Print the raw JSON response
-          echo "📋 Raw BUILD_JSON response:"
-          echo "$BUILD_JSON"
-          echo "--- End of BUILD_JSON ---"
+          if [ -z "$BUILD_JSON" ]; then
+            echo "❌ Failed to start build. Please check your configuration."
+            exit 1
+          fi
 
-          BUILD_ID=$(echo "$BUILD_JSON" | jq -r '.[0].id')
-
+          BUILD_ID=$(echo "$BUILD_JSON" | jq -r '.[0].id'
           echo "build_id=${BUILD_ID}" >> $GITHUB_OUTPUT
           echo "BUILD_ID=${BUILD_ID}" >> $GITHUB_ENV
         env:
@@ -99,39 +97,76 @@ jobs:
         run: |
           echo "⏳ Waiting for build to complete..."
 
-          MAX_WAIT_TIME=2700 # 45 minutes
-          POLL_INTERVAL=60 # 1 minute
-          ELAPSED_TIME=0
+          # Wait time constants (in seconds)
+          MAX_QUEUE_WAIT=10800  # 3 hours max queue wait time
+          MAX_BUILD_TIME=2700   # 45 minutes max build time
+          POLL_INTERVAL=60      # Check every minute
 
-          # Usa a variável de ambiente já disponível
-          echo "Checking build status for BUILD_ID: $BUILD_ID"
+          # Initialize counters
+          QUEUE_TIME=0
+          BUILD_TIME=0
 
-          while [ $ELAPSED_TIME -lt $MAX_WAIT_TIME ]; do
-            BUILD_INFO=$(eas build:view $BUILD_ID --non-interactive --json)
-            
-            # Debug: Print the raw JSON response
-            echo "📋 Raw BUILD_INFO response:"
-            echo "$BUILD_INFO"
-            echo "--- End of BUILD_INFO ---"
-            
+          # First phase: Wait for build to exit the queue
+          echo "Phase 1: Waiting for build to exit the queue..."
+          while [ $QUEUE_TIME -lt $MAX_QUEUE_WAIT ]; do
+            BUILD_INFO=$(eas build:view $BUILD_ID --json)
+            if [ -z "$BUILD_INFO" ]; then
+              echo "❌ Failed to retrieve build information"
+              exit 1
+            fi
+
             BUILD_STATUS=$(echo "$BUILD_INFO" | jq -r '.status')
+            echo "Current status: $BUILD_STATUS"
             
-            case "$BUILD_STATUS" in
-              "finished"|"errored"|"canceled"|"failed")
-                break
-                ;;
-            esac
+            # If the build is no longer in queue, proceed to next phase
+            if [ "$BUILD_STATUS" != "IN_QUEUE" ]; then
+              echo "✅ Build exited queue after $QUEUE_TIME seconds"
+              break
+            fi
+            
+            # Show estimated queue time remaining
+            QUEUE_POS=$(echo "$BUILD_INFO" | jq -r '.queuePosition // "unknown"')
+            WAIT_TIME=$(echo "$BUILD_INFO" | jq -r '.estimatedWaitTimeLeftSeconds // "unknown"')
+            echo "Queue position: $QUEUE_POS, Estimated wait: $WAIT_TIME seconds"
             
             sleep $POLL_INTERVAL
-            ELAPSED_TIME=$((ELAPSED_TIME + POLL_INTERVAL))
+            QUEUE_TIME=$((QUEUE_TIME + POLL_INTERVAL))
           done
 
-          if [ $ELAPSED_TIME -ge $MAX_WAIT_TIME ]; then
-            BUILD_STATUS="timeout"
+          if [ $QUEUE_TIME -ge $MAX_QUEUE_WAIT ]; then
+            echo "⚠️ Queue wait time exceeded maximum ($MAX_QUEUE_WAIT seconds)"
+            BUILD_STATUS="queue_timeout"
+          else
+            # Second phase: Wait for build to complete
+            echo "Phase 2: Build in progress, waiting for completion..."
+            while [ $BUILD_TIME -lt $MAX_BUILD_TIME ]; do
+              BUILD_INFO=$(eas build:view $BUILD_ID --json)
+              if [ -z "$BUILD_INFO" ]; then
+                echo "❌ Failed to retrieve build information"
+                exit 1
+              fi
+              
+              BUILD_STATUS=$(echo "$BUILD_INFO" | jq -r '.status')
+              echo "Current status: $BUILD_STATUS"
+              
+              case "$BUILD_STATUS" in
+                "FINISHED"|"ERRORED"|"CANCELED"|"FAILED")
+                  echo "Build process completed with status: $BUILD_STATUS after $BUILD_TIME seconds"
+                  break
+                  ;;
+              esac
+              
+              sleep $POLL_INTERVAL
+              BUILD_TIME=$((BUILD_TIME + POLL_INTERVAL))
+            done
+            
+            if [ $BUILD_TIME -ge $MAX_BUILD_TIME ]; then
+              BUILD_STATUS="build_timeout"
+            fi
           fi
 
           # Get final build URL
-          FINAL_URL=$(eas build:view $BUILD_ID --non-interactive --json | jq -r '.artifacts.buildUrl // "Not available"')
+          FINAL_URL=$(eas build:view $BUILD_ID --json | jq -r '.[0].artifacts.buildUrl // "Not available"')
 
           echo "build_status=${BUILD_STATUS}" >> $GITHUB_OUTPUT
           echo "build_url=${FINAL_URL}" >> $GITHUB_OUTPUT
