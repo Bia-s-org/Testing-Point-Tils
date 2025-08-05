@@ -3,12 +3,18 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "expo start",
-    "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web",
-    "lint": "expo lint"
+    "start": "expo start --go",
+    "lint": "expo lint",
+    "build:dev": "eas build --profile development --platform all",
+    "build:preview": "eas build --profile preview --platform all",
+    "build:prod": "eas build --profile production --platform all",
+    "build:android": "eas build --profile development --platform android",
+    "build:ios": "eas build --profile development --platform ios",
+    "deploy:dev": "eas build --profile development --auto-submit --platform all",
+    "deploy:preview": "eas build --profile preview --auto-submit --platform all",
+    "deploy:prod": "eas build --profile production --auto-submit --platform all",
+    "deploy:android": "eas build --profile development --auto-submit --platform android",
+    "deploy:ios": "eas build --profile development --auto-submit --platform ios"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
@@ -36,7 +42,8 @@
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",
     "react-native-web": "~0.20.0",
-    "react-native-webview": "13.13.5"
+    "react-native-webview": "13.13.5",
+    "expo-dev-client": "~5.2.4"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

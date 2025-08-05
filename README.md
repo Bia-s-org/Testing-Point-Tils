@@ -1,50 +1,72 @@
-# Welcome to your Expo app 👋
+# Point Tils
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+## 🚀 Tecnologias
 
-## Get started
+- **[React Native](https://reactnative.dev/)** - Framework para desenvolvimento mobile
+- **[Expo](https://expo.dev/)** - Plataforma para desenvolvimento universal
+- **[TypeScript](https://www.typescriptlang.com/)** - Linguagem de programação
+- **[EAS](https://docs.expo.dev/eas/)** - Expo Application Services para build e deploy
 
-1. Install dependencies
+## 📦 Pré-requisitos
 
+Antes de começar, você precisa ter instalado:
+
+- **Node.js** (versão 18 ou superior)
+- **npm** ou **yarn**
+- **Expo CLI**: `npm install -g @expo/cli`
+- **EAS CLI**: `npm install -g eas-cli`
+- **Git**
+
+### Para desenvolvimento:
+- **Expo Go** (para emulador Android ou iOS)
+- **Xcode** (para simulador iOS - apenas macOS)
+
+## 🛠️ Desenvolvimento
+
+1. **Instale as dependências**
    ```bash
+   cd point-tils
    npm install
    ```
 
-2. Start the app
-
+2. **Configure o EAS**
    ```bash
-   npx expo start
+   eas login
+   eas build:configure
    ```
 
-In the output, you'll find options to open the app in a
+### 🔧 Desenvolvimento Local
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+| Comando | Descrição |
+|---------|-----------|
+| `npm start` | Inicia o servidor de desenvolvimento |
+| `npm run lint` | Executa verificação de código (ESLint) |
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+> #### Testando
+>
+> - **Android**: Expo Go
+> - **iOS**: Expo Go ou Simulador XCode
 
-## Get a fresh project
+### 🏗️ Build (Geração de artefatos)
 
-When you're ready, run:
+| Comando | Plataforma | Descrição |
+|---------|------------|-----------|
+| `npm run build:dev` | Android + iOS | Build desenvolvimento para ambas plataformas |
+| `npm run build:preview` | Android + iOS | Build preview/teste para ambas plataformas |
+| `npm run build:android` | Android | Build apenas para Android (APK) |
+| `npm run build:ios` | iOS | Build apenas para iOS (IPA) |
 
-```bash
-npm run reset-project
-```
+> #### Artifacts Gerados
+>
+> - **Android**: Arquivo `.apk` para instalação direta
+> - **iOS**: Arquivo `.ipa` para distribuição via TestFlight/App Storen
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## 💰 **Custos**
 
-## Learn more
+| Ação | iOS | Android |
+|------|-----|---------|
+| **Expo Go (desenvolvimento)** | ✅ Gratuito | ✅ Gratuito |
+| **Build** (gerar IPA/APK) | ❌ $99/ano | ✅ Gratuito |
+| **Deploy** (TestFlight/App Store) | ❌ $99/ano | ✅ Gratuito ($25 Play Store) |
 
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+> **⚠️ Importante:** Para iOS, até builds de development precisam de Apple Developer Account
