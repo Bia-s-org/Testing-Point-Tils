@@ -81,8 +81,8 @@ jobs:
 
           # Capture build ID and URL from JSON output
           BUILD_JSON=$(eas build --platform android --profile preview --non-interactive --no-wait --json)
-          BUILD_ID=$(echo "$BUILD_JSON" | jq -r '.id')
-          BUILD_URL=$(echo "$BUILD_JSON" | jq -r '.artifacts.buildUrl // "Not available"')
+          BUILD_ID=$(echo "$BUILD_JSON" | jq -r '.[0].id')
+          BUILD_URL=$(echo "$BUILD_JSON" | jq -r '.[0].artifacts.buildUrl // "Not available"')
 
           echo "build_id=${BUILD_ID}" >> $GITHUB_OUTPUT
           echo "build_url=${BUILD_URL}" >> $GITHUB_OUTPUT
@@ -200,15 +200,3 @@ jobs:
           curl -H "Content-Type: application/json" -X POST -d "{
             \"content\": \"$ICON **Nightly Build $RESULT**\n\n📱 **Projeto:** Point Tils\n📊 **Status:** ${{ job.status }}\n🏷️ **Versão:** ${{ steps.build-step.outputs.nightly_version || 'N/A' }}\n🔗 **Commit:** $(git rev-parse --short HEAD)\n🔗 **Build:** $BUILD_URL\n📝 **Logs:** $LOGS_URL\"
           }" "${{ secrets.DISCORD_WEBHOOK }}"
-
-      - name: Summary
-        if: always()
-        run: |
-          echo "## 🌙 Nightly Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Status | ${{ job.status }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Version | ${{ steps.build-step.outputs.nightly_version || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build Status | ${{ env.BUILD_STATUS || 'Unknown' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build URL | ${{ env.BUILD_URL != 'Not available' && env.BUILD_URL || 'Processing...' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Timestamp | $(date) |" >> $GITHUB_STEP_SUMMARY
