@@ -81,6 +81,12 @@ jobs:
 
           # Capture build ID and URL from JSON output
           BUILD_JSON=$(eas build --platform android --profile preview --non-interactive --no-wait --json)
+          
+          # Debug: Print the raw JSON response
+          echo "📋 Raw BUILD_JSON response:"
+          echo "$BUILD_JSON"
+          echo "--- End of BUILD_JSON ---"
+
           BUILD_ID=$(echo "$BUILD_JSON" | jq -r '.[0].id')
           BUILD_URL=$(echo "$BUILD_JSON" | jq -r '.[0].artifacts.buildUrl // "Not available"')
 
