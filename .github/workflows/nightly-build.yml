@@ -20,7 +20,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.branch || 'main' }} # Use the branch from workflow dispatch or default to main
+          ref: ${{ github.event.inputs.branch || 'main' }}
           fetch-depth: 0
 
       - name: Setup Node.js
@@ -50,10 +50,8 @@ jobs:
       - name: Verify EAS Authentication
         run: |
           if ! eas whoami; then
-            echo "❌ EAS authentication failed"
             exit 1
           fi
-          echo "✅ EAS authentication successful"
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
@@ -76,13 +74,21 @@ jobs:
             const fs = require('fs');
             const appJson = JSON.parse(fs.readFileSync('app.json', 'utf8'));
             appJson.expo.version = '${NIGHTLY_VERSION}';
-            appJson.expo.name = 'Point Tils (Nightly)';
-            appJson.expo.android.package = 'com.bialves.pointtils.nightly';
             fs.writeFileSync('app.json', JSON.stringify(appJson, null, 2));
           "
 
           echo "🚀 Starting build for version: ${NIGHTLY_VERSION}"
-          eas build --platform android --profile preview --non-interactive --no-wait
+
+          # Capture build ID and URL from JSON output
+          BUILD_JSON=$(eas build --platform android --profile preview --non-interactive --no-wait --json)
+          BUILD_ID=$(echo "$BUILD_JSON" | jq -r '.id')
+          BUILD_URL=$(echo "$BUILD_JSON" | jq -r '.artifacts.buildUrl // "Not available"')
+
+          echo "build_id=${BUILD_ID}" >> $GITHUB_OUTPUT
+          echo "build_url=${BUILD_URL}" >> $GITHUB_OUTPUT
+
+          echo "BUILD_ID=${BUILD_ID}" >> $GITHUB_ENV
+          echo "BUILD_URL=${BUILD_URL}" >> $GITHUB_ENV
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
@@ -90,19 +96,17 @@ jobs:
         id: build-status
         run: |
           echo "⏳ Waiting for build to complete..."
-          
-          MAX_WAIT_TIME=1800  # 30 minutes
-          POLL_INTERVAL=60    # 1 minute
+
+          MAX_WAIT_TIME=2700 # 45 minutes
+          POLL_INTERVAL=60 # 1 minute
           ELAPSED_TIME=0
-          
-          # Initial wait for build to register
-          sleep 30
-          
+
+          # Use captured build ID
+          BUILD_ID="${{ steps.build-step.outputs.build_id }}"
+
           while [ $ELAPSED_TIME -lt $MAX_WAIT_TIME ]; do
-            BUILD_INFO=$(eas build:list --non-interactive --limit 1 --json)
-            BUILD_STATUS=$(echo "$BUILD_INFO" | jq -r '.[0].status')
-            BUILD_URL=$(echo "$BUILD_INFO" | jq -r '.[0].buildUrl // "Not available"')
-            BUILD_ID=$(echo "$BUILD_INFO" | jq -r '.[0].id')
+            BUILD_INFO=$(eas build:view $BUILD_ID --non-interactive --json)
+            BUILD_STATUS=$(echo "$BUILD_INFO" | jq -r '.status')
             
             case "$BUILD_STATUS" in
               "finished"|"errored"|"canceled"|"failed")
@@ -113,18 +117,19 @@ jobs:
             sleep $POLL_INTERVAL
             ELAPSED_TIME=$((ELAPSED_TIME + POLL_INTERVAL))
           done
-          
+
           if [ $ELAPSED_TIME -ge $MAX_WAIT_TIME ]; then
             BUILD_STATUS="timeout"
           fi
-          
+
+          # Get final build URL
+          FINAL_URL=$(eas build:view $BUILD_ID --non-interactive --json | jq -r '.artifacts.buildUrl // "Not available"')
+
           echo "build_status=${BUILD_STATUS}" >> $GITHUB_OUTPUT
-          echo "build_url=${BUILD_URL}" >> $GITHUB_OUTPUT
-          echo "build_id=${BUILD_ID}" >> $GITHUB_OUTPUT
-          
+          echo "build_url=${FINAL_URL}" >> $GITHUB_OUTPUT
+
           echo "BUILD_STATUS=${BUILD_STATUS}" >> $GITHUB_ENV
-          echo "BUILD_URL=${BUILD_URL}" >> $GITHUB_ENV
-          echo "BUILD_ID=${BUILD_ID}" >> $GITHUB_ENV
+          echo "BUILD_URL=${FINAL_URL}" >> $GITHUB_ENV
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
@@ -171,7 +176,7 @@ jobs:
         with:
           name: nightly-release-notes-${{ steps.build-step.outputs.timestamp }}
           path: release-notes.md
-          retention-days: 30
+          retention-days: 15
 
       - name: Send Discord notification
         if: always()
@@ -180,25 +185,21 @@ jobs:
             echo "DISCORD_WEBHOOK not set, skipping Discord notification."
             exit 0
           fi
-          nstatus="${{ job.status }}"
-          nversion="${{ steps.build-step.outputs.nightly_version || 'N/A' }}"
-          ncommit="${{ github.sha }}"
-          nbuildurl="${{ env.BUILD_URL != 'Not available' && env.BUILD_URL || 'Processando...' }}"
-          nlogs="${{ job.status == 'failure' && format('📝 **Logs:** {0}/{1}/actions/runs/{2}', github.server_url, github.repository, github.run_id) || '' }}"
-          nicon="❌"
-          nresult="FAILED"
-          if [ "$nstatus" = "success" ]; then
-            nicon="✅"
-            nresult="SUCCESS"
+
+          if [ "${{ job.status }}" = "success" ]; then
+            ICON="✅"
+            RESULT="SUCCESS"
+          else
+            ICON="❌"
+            RESULT="FAILED"
           fi
 
-          cat > discord_message.json << EOF
-          {
-            "content": "$nicon **Nightly Build $nresult**\\n\\n📱 **Projeto:** Point Tils\\n📊 **Status:** $nstatus\\n🏷️ **Versão:** $nversion\\n🔗 **Commit:** $ncommit\\n\\n🔗 **Build:** $nbuildurl\\n\\n$nlogs"
-          }
-          EOF
+          BUILD_URL="${{ env.BUILD_URL != 'Not available' && env.BUILD_URL || 'Processando...' }}"
+          LOGS_URL="${{ job.status == 'failure' && format('{0}/{1}/actions/runs/{2}', github.server_url, github.repository, github.run_id) || '' }}"
 
-          curl -H "Content-Type: application/json" -X POST -d @discord_message.json "${{ secrets.DISCORD_WEBHOOK }}"
+          curl -H "Content-Type: application/json" -X POST -d "{
+            \"content\": \"$ICON **Nightly Build $RESULT**\n\n📱 **Projeto:** Point Tils\n📊 **Status:** ${{ job.status }}\n🏷️ **Versão:** ${{ steps.build-step.outputs.nightly_version || 'N/A' }}\n🔗 **Commit:** $(git rev-parse --short HEAD)\n🔗 **Build:** $BUILD_URL\n📝 **Logs:** $LOGS_URL\"
+          }" "${{ secrets.DISCORD_WEBHOOK }}"
 
       - name: Summary
         if: always()
