@@ -14,7 +14,7 @@ jobs:
   build:
     name: Generate Nightly Android Build
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 225  # Both queue and build time (3h45m)
     outputs:
       build_id: ${{ steps.build-step.outputs.build_id }}
       build_status: ${{ steps.build-status.outputs.build_status }}
