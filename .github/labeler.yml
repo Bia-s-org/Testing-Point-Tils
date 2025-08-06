@@ -1,17 +1,24 @@
 # Labels based on file changes
 documentation:
-  - '**/*.md' # Matches all markdown files
+  - paths:
+      - '**/*.md'
 
 ci/cd:
-  - '.github/**' # Matches all files in the .github directory
+  - paths:
+      - '.github/**'
 
 dependencies:
-  - 'package.json'
-  - 'package-lock.json'
+  - paths:
+      - 'package.json'
+      - 'package-lock.json'
 
 # Labels based on branch names
 feature:
-  - head-branch: ['^feature/', 'feature'] # Matches branches starting with 'feature' or 'feature/'
+  - head-branch:
+      - '^feature/'
+      - 'feature'
 
 bugfix:
-  - head-branch: ['^fix/', 'bug'] # Matches branches starting with 'fix/' or 'bug'
+  - head-branch:
+      - '^fix/'
+      - 'bug'
