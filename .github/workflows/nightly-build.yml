@@ -216,23 +216,25 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+				
+      - name: Capture current date and time
+        run: echo "CURRENT_DATE=$(date '+%d/%m/%Y %H:%M:%S')" >> $GITHUB_ENV
 
       - name: Create GitHub Release
         id: create_release
         uses: actions/create-release@v1
         with:
           tag_name: nightly-${{ needs.build.outputs.timestamp || 'fallback-timestamp' }}
-          release_name: Nightly Build - ${{ needs.build.outputs.nightly_version }}
+          release_name: ${{ needs.build.outputs.nightly_version }} [Nightly Build]
           body: |
             ## 🌙 Nightly Build Report
-            - **Data:** $(date +"%d/%m/%Y %H:%M:%S")
+            - **Data:** $CURRENT_DATE
             - **Versão:** ${{ needs.build.outputs.nightly_version || 'N/A' }}
             - **Commit:** ${{ needs.build.outputs.commit_hash || 'N/A' }}
             - **Descrição:** ${{ needs.build.outputs.commit_msg || 'N/A' }}
             - **Status:** ${{ needs.build.outputs.build_status || needs.build.result }}
             ### Links
             - **Build URL:** ${{ needs.build.outputs.build_url != 'Not available' && needs.build.outputs.build_url || 'Não disponível' }}
-            - **EAS Dashboard:** [Ver builds](https://expo.dev/accounts/bialves/projects/point-tils/builds)
             ---
             _Gerado automaticamente pelo GitHub Actions_
           draft: false
