@@ -203,44 +203,48 @@ jobs:
           echo "commit_hash=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
           echo "commit_msg=$(git log -1 --pretty=%B | head -1)" >> $GITHUB_OUTPUT
 
-  create-release-notes:
-    name: Generate Build Summary
+  publish-release:
+    name: Publish GitHub Release
     runs-on: ubuntu-latest
     needs: build
-    if: always()
+    if: ${{ needs.build.result == 'success' && needs.build.outputs.build_status != 'queue_timeout' && needs.build.outputs.build_status != 'build_timeout' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
         with:
-          ref: ${{ github.event.inputs.branch || 'main' }}
+          tag_name: nightly-${{ needs.build.outputs.timestamp }}
+          release_name: Nightly Build - ${{ needs.build.outputs.nightly_version }}
+          body: |
+            ## 🌙 Nightly Build Report
 
-      - name: Create build summary
-        run: |
-          COMMIT_HASH=$(git rev-parse --short HEAD)
-          COMMIT_MSG=$(git log -1 --pretty=%B | head -1)
+            - **Data:** $(date +"%d/%m/%Y %H:%M:%S")
+            - **Versão:** ${{ needs.build.outputs.nightly_version || 'N/A' }}
+            - **Commit:** ${{ needs.build.outputs.commit_hash || 'N/A' }}
+            - **Descrição:** ${{ needs.build.outputs.commit_msg || 'N/A' }}
+            - **Status:** ${{ needs.build.outputs.build_status || needs.build.result }}
 
-          # Write to GitHub step summary
-          cat << EOF >> $GITHUB_STEP_SUMMARY
-          # 🌙 Nightly Build Report
+            ### Links
+            - **Build URL:** ${{ needs.build.outputs.build_url != 'Not available' && needs.build.outputs.build_url || 'Não disponível' }}
+            - **EAS Dashboard:** [Ver builds](https://expo.dev/accounts/bialves/projects/point-tils/builds)
 
-          - **Data:** $(date +"%d/%m/%Y %H:%M:%S")
-          - **Versão:** ${{ needs.build.outputs.nightly_version || 'N/A' }}
-          - **Commit:** ${COMMIT_HASH}
-          - **Descrição:** ${COMMIT_MSG}
-          - **Status:** ${{ needs.build.outputs.build_status || needs.build.result }}
+            ---
+            _Gerado automaticamente pelo GitHub Actions_
+          draft: false
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-          ## Informações da Build
-          - **Build ID:** ${{ needs.build.outputs.build_id || 'N/A' }}
-          - **Plataforma:** Android
-          - **Perfil:** Preview
-
-          ### Links
-          - **Build URL:** ${{ needs.build.outputs.build_url != 'Not available' && needs.build.outputs.build_url || 'Não disponível' }}
-          - **EAS Dashboard:** [Ver builds](https://expo.dev/accounts/bialves/projects/point-tils/builds)
-
-          ---
-          _Gerado automaticamente pelo GitHub Actions_
-          EOF
+      - name: Upload Build Artifact to Release
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./path/to/your/build.apk
+          asset_name: nightly-build-${{ needs.build.outputs.timestamp }}.apk
+          asset_content_type: application/vnd.android.package-archive
 
   send-notification:
     name: Send Discord Notification
