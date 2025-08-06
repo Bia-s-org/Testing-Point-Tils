@@ -135,10 +135,11 @@ jobs:
       - name: Check for unused dependencies
         run: |
           npx depcheck --json > depcheck-output.json
-          jq '.dependencies' depcheck-output.json
+          unused=$(jq '.dependencies' depcheck-output.json)
           unused_count=$(jq '.dependencies | length' depcheck-output.json)
           if [ "$unused_count" -gt 0 ]; then
-            echo "Unused dependencies found"
+            echo "Unused dependencies found:"
+            echo "$unused"
             exit 1
           fi
         continue-on-error: false
