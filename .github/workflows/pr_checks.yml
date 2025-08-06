@@ -133,7 +133,6 @@ jobs:
         run: npm ci
 
       - name: Check for unused dependencies
-        continue-on-error: true
         run: |
           echo "Running depcheck..."
           npx depcheck --json --config depcheck.config.js > depcheck-output.json || echo "Depcheck exited with error (expected if unused dependencies found)"
