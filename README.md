@@ -1,4 +1,4 @@
-# Point Tils - testing
+# Point Tils
 
 ## 🚀 Tecnologias
 
