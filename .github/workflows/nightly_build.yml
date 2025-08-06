@@ -255,12 +255,12 @@ jobs:
           release_name: ${{ needs.build.outputs.nightly_version }} [Nightly Build]
           body: |
             ## 🌙 Nightly Build Report
-            - **Date:** $CURRENT_DATE
+            - **Date:** ${{ env.CURRENT_DATE }}
             - **Build ID:** ${{ needs.build.outputs.build_id || 'Not available' }}
             - **Commit ID:** ${{ needs.build.outputs.commit_hash || 'Not available' }}
             ---
             ### What's new in this build
-            $CHANGELOG
+            ${{ env.CHANGELOG }}
 
             ### Links
             - **Build URL:** ${{ needs.build.outputs.build_url != 'Not available' && needs.build.outputs.build_url || 'Not available' }}
