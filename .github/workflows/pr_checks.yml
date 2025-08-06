@@ -133,8 +133,15 @@ jobs:
         run: npm ci
 
       - name: Check for unused dependencies
-        run: npx depcheck --json | jq '.dependencies | length' | xargs -I {} sh -c 'if [ {} -gt 0 ]; then echo "Unused dependencies found"; exit 1; fi'
-        continue-on-error: true
+        run: |
+          npx depcheck --json > depcheck-output.json
+          jq '.dependencies' depcheck-output.json
+          unused_count=$(jq '.dependencies | length' depcheck-output.json)
+          if [ "$unused_count" -gt 0 ]; then
+            echo "Unused dependencies found"
+            exit 1
+          fi
+        continue-on-error: false
 
       - name: Bundle size analysis
         run: |
