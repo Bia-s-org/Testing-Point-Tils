@@ -22,6 +22,8 @@ jobs:
       nightly_version: ${{ steps.build-step.outputs.nightly_version }}
       original_version: ${{ steps.build-step.outputs.original_version }}
       timestamp: ${{ steps.build-step.outputs.timestamp }}
+      commit_hash: ${{ steps.commit-info.outputs.commit_hash }}
+      commit_msg: ${{ steps.commit-info.outputs.commit_msg }}
 
     steps:
       - name: Checkout code
@@ -66,6 +68,7 @@ jobs:
         id: build-step
         run: |
           echo "🌙 Generating nightly build..."
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
           ORIGINAL_VERSION=$(node -p "require('./package.json').version")
           NIGHTLY_VERSION="${ORIGINAL_VERSION}-nightly.${TIMESTAMP}"
 
@@ -203,49 +206,62 @@ jobs:
           echo "commit_hash=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
           echo "commit_msg=$(git log -1 --pretty=%B | head -1)" >> $GITHUB_OUTPUT
 
-  create-release-notes:
-    name: Generate Build Summary
+  publish-release:
+    name: Publish GitHub Release
     runs-on: ubuntu-latest
     needs: build
-    if: always()
+    if: ${{ needs.build.result == 'success' && needs.build.outputs.build_status != 'queue_timeout' && needs.build.outputs.build_status != 'build_timeout' }}
+    outputs:
+      release_url: ${{ steps.create_release.outputs.html_url }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+				
+      - name: Capture current date and time
+        run: echo "CURRENT_DATE=$(date '+%d/%m/%Y %H:%M:%S')" >> $GITHUB_ENV
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
         with:
-          ref: ${{ github.event.inputs.branch || 'main' }}
+          tag_name: nightly-${{ needs.build.outputs.timestamp || 'fallback-timestamp' }}
+          release_name: ${{ needs.build.outputs.nightly_version }} [Nightly Build]
+          body: |
+            ## 🌙 Nightly Build Report
+            - **Data:** $CURRENT_DATE
+            - **Versão:** ${{ needs.build.outputs.nightly_version || 'N/A' }}
+            - **Commit:** ${{ needs.build.outputs.commit_hash || 'N/A' }}
+            - **Descrição:** ${{ needs.build.outputs.commit_msg || 'N/A' }}
+            - **Status:** ${{ needs.build.outputs.build_status || needs.build.result }}
+            ### Links
+            - **Build URL:** ${{ needs.build.outputs.build_url != 'Not available' && needs.build.outputs.build_url || 'Não disponível' }}
+            ---
+            _Gerado automaticamente pelo GitHub Actions_
+          draft: false
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
 
-      - name: Create build summary
+      - name: Download APK from EAS
+        if: ${{ needs.build.outputs.build_status == 'FINISHED' && needs.build.outputs.build_url != 'Not available' }}
         run: |
-          COMMIT_HASH=$(git rev-parse --short HEAD)
-          COMMIT_MSG=$(git log -1 --pretty=%B | head -1)
+          echo "⬇️ Downloading APK from EAS..."
+          curl -L "${{ needs.build.outputs.build_url }}" -o build.apk
 
-          # Write to GitHub step summary
-          cat << EOF >> $GITHUB_STEP_SUMMARY
-          # 🌙 Nightly Build Report
-
-          - **Data:** $(date +"%d/%m/%Y %H:%M:%S")
-          - **Versão:** ${{ needs.build.outputs.nightly_version || 'N/A' }}
-          - **Commit:** ${COMMIT_HASH}
-          - **Descrição:** ${COMMIT_MSG}
-          - **Status:** ${{ needs.build.outputs.build_status || needs.build.result }}
-
-          ## Informações da Build
-          - **Build ID:** ${{ needs.build.outputs.build_id || 'N/A' }}
-          - **Plataforma:** Android
-          - **Perfil:** Preview
-
-          ### Links
-          - **Build URL:** ${{ needs.build.outputs.build_url != 'Not available' && needs.build.outputs.build_url || 'Não disponível' }}
-          - **EAS Dashboard:** [Ver builds](https://expo.dev/accounts/bialves/projects/point-tils/builds)
-
-          ---
-          _Gerado automaticamente pelo GitHub Actions_
-          EOF
+      - name: Upload Build Artifact to Release
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./build.apk
+          asset_name: nightly-build-${{ needs.build.outputs.timestamp }}.apk
+          asset_content_type: application/vnd.android.package-archive
 
   send-notification:
     name: Send Discord Notification
     runs-on: ubuntu-latest
-    needs: build
+    needs:
+      - build
+      - publish-release
     if: always()
     steps:
       - name: Checkout code
@@ -265,8 +281,9 @@ jobs:
 
           BUILD_URL="${{ needs.build.outputs.build_url != 'Not available' && needs.build.outputs.build_url || ' ' }}"
           LOGS_URL="${{ needs.build.result != 'success' && format('{0}/{1}/actions/runs/{2}', github.server_url, github.repository, github.run_id) || '' }}"
-          COMMIT_HASH=$(git rev-parse --short HEAD)
+          COMMIT_HASH=${{ needs.build.outputs.commit_hash || 'N/A' }}
+          RELEASE_URL=${{ needs.publish-release.outputs.release_url || 'N/A' }}
 
           curl -H "Content-Type: application/json" -X POST -d "{
-            \"content\": \"$ICON **Nightly Build $RESULT**\n\n📱 **Projeto:** Point Tils\n📊 **Status:** ${{ needs.build.result }}\n🏷️ **Versão:** ${{ needs.build.outputs.nightly_version || 'N/A' }}\n🔗 **Commit:** $COMMIT_HASH\n⚙️ **Artefato:** $BUILD_URL\n📝 **Logs:** $LOGS_URL\"
+            \"content\": \"$ICON **Nightly Build $RESULT**\n\n📱 **Projeto:** Point Tils\n📊 **Status:** ${{ needs.build.result }}\n🏷️ **Versão:** ${{ needs.build.outputs.nightly_version || 'N/A' }}\n🔗 **Commit:** $COMMIT_HASH\n⚙️ **GitHub Release:** $RELEASE_URL\n📝 **Logs:** $LOGS_URL\"
           }" "${{ secrets.DISCORD_WEBHOOK }}"
