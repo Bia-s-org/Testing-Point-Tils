@@ -22,6 +22,8 @@ jobs:
       nightly_version: ${{ steps.build-step.outputs.nightly_version }}
       original_version: ${{ steps.build-step.outputs.original_version }}
       timestamp: ${{ steps.build-step.outputs.timestamp }}
+      commit_hash: ${{ steps.commit-info.outputs.commit_hash }}
+      commit_msg: ${{ steps.commit-info.outputs.commit_msg }}
 
     steps:
       - name: Checkout code
@@ -66,6 +68,7 @@ jobs:
         id: build-step
         run: |
           echo "🌙 Generating nightly build..."
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
           ORIGINAL_VERSION=$(node -p "require('./package.json').version")
           NIGHTLY_VERSION="${ORIGINAL_VERSION}-nightly.${TIMESTAMP}"
 
@@ -216,7 +219,7 @@ jobs:
         id: create_release
         uses: actions/create-release@v1
         with:
-          tag_name: nightly-${{ needs.build.outputs.timestamp }}
+          tag_name: nightly-${{ needs.build.outputs.timestamp || 'fallback-timestamp' }}
           release_name: Nightly Build - ${{ needs.build.outputs.nightly_version }}
           body: |
             ## 🌙 Nightly Build Report
@@ -269,7 +272,7 @@ jobs:
 
           BUILD_URL="${{ needs.build.outputs.build_url != 'Not available' && needs.build.outputs.build_url || ' ' }}"
           LOGS_URL="${{ needs.build.result != 'success' && format('{0}/{1}/actions/runs/{2}', github.server_url, github.repository, github.run_id) || '' }}"
-          COMMIT_HASH=$(git rev-parse --short HEAD)
+          COMMIT_HASH=${{ needs.build.outputs.commit_hash || 'N/A' }}
 
           curl -H "Content-Type: application/json" -X POST -d "{
             \"content\": \"$ICON **Nightly Build $RESULT**\n\n📱 **Projeto:** Point Tils\n📊 **Status:** ${{ needs.build.result }}\n🏷️ **Versão:** ${{ needs.build.outputs.nightly_version || 'N/A' }}\n🔗 **Commit:** $COMMIT_HASH\n⚙️ **Artefato:** $BUILD_URL\n📝 **Logs:** $LOGS_URL\"
