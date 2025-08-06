@@ -134,15 +134,22 @@ jobs:
 
       - name: Check for unused dependencies
         run: |
-          npx depcheck --json > depcheck-output.json
-          unused=$(jq '.dependencies' depcheck-output.json)
-          unused_count=$(jq '.dependencies | length' depcheck-output.json)
-          if [ "$unused_count" -gt 0 ]; then
-            echo "Unused dependencies found:"
-            echo "$unused"
+          echo "Running depcheck..."
+          npx depcheck --json --config depcheck.config.js > depcheck-output.json || echo "Depcheck exited with error (expected if unused dependencies found)"
+          
+          if jq -e '.dependencies' depcheck-output.json > /dev/null; then
+            unused=$(jq '.dependencies' depcheck-output.json)
+            unused_count=$(jq '.dependencies | length' depcheck-output.json)
+            if [ "$unused_count" -gt 0 ]; then
+              echo "❌ Unused dependencies found:"
+              echo "$unused"
+              exit 1
+            fi
+          else
+            echo "⚠️ Invalid or missing JSON structure in depcheck-output.json"
+            cat depcheck-output.json
             exit 1
           fi
-        continue-on-error: false
 
       - name: Bundle size analysis
         run: |
