@@ -1,11 +1,11 @@
 # Labels based on file changes
 documentation:
   - changed-files:
-      - any-glob-to-any-file: '**/*.md' # Any changes in markdown files
+      - '**/*.md' # Any changes in markdown files
 
 ci/cd:
   - changed-files:
-      - any-glob-to-any-file: '.github/**' # Any changes in the .github folder
+      - '.github/**' # Any changes in the .github folder
 
 dependencies:
   - changed-files:
