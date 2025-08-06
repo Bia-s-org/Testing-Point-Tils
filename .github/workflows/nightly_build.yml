@@ -226,10 +226,13 @@ jobs:
           # Find the most recent nightly tag
           LATEST_TAG=$(git tag -l "nightly-*" --sort=-creatordate | head -n 1)
           
+          # Define default commit count for changelog
+          COMMIT_COUNT=10
+          
           if [ -z "$LATEST_TAG" ]; then
             # If no previous nightly tag exists, use the last 10 commits
-            echo "CHANGELOG=$(git log -10 --pretty=format:"- %s [%h]" | sed 's/"/\\"/g')" >> $GITHUB_ENV
-            echo "changelog=$(git log -10 --pretty=format:"- %s [%h]" | sed 's/"/\\"/g')" >> $GITHUB_OUTPUT
+            echo "CHANGELOG=$(git log -${COMMIT_COUNT} --pretty=format:"- %s [%h]" | sed 's/"/\\"/g')" >> $GITHUB_ENV
+            echo "changelog=$(git log -${COMMIT_COUNT} --pretty=format:"- %s [%h]" | sed 's/"/\\"/g')" >> $GITHUB_OUTPUT
           else
             # Check if there are any commits between last tag and HEAD
             COMMIT_COUNT=$(git rev-list --count ${LATEST_TAG}..HEAD)
@@ -253,14 +256,14 @@ jobs:
           body: |
             ## 🌙 Nightly Build Report
             - **Date:** $CURRENT_DATE
-            - **Build ID:** ${{ needs.build.outputs.build_id || 'N/A' }}
-            - **Commit ID:** ${{ needs.build.outputs.commit_hash || 'N/A' }}
+            - **Build ID:** ${{ needs.build.outputs.build_id || 'Not available' }}
+            - **Commit ID:** ${{ needs.build.outputs.commit_hash || 'Not available' }}
             ---
             ### What's new in this build
             $CHANGELOG
 
             ### Links
-            - **Build URL:** ${{ needs.build.outputs.build_url != 'Not available' && needs.build.outputs.build_url || 'Não disponível' }}
+            - **Build URL:** ${{ needs.build.outputs.build_url != 'Not available' && needs.build.outputs.build_url || 'Not available' }}
           draft: false
           prerelease: true
         env:
@@ -309,5 +312,5 @@ jobs:
           RELEASE_URL=${{ needs.publish-release.outputs.release_url || 'N/A' }}
 
           curl -H "Content-Type: application/json" -X POST -d "{
-            \"content\": \"$ICON **Nightly Build $RESULT**\n\n📱 **Projeto:** Point Tils\n📊 **Status:** ${{ needs.build.result }}\n🏷️ **Versão:** ${{ needs.build.outputs.nightly_version || 'N/A' }}\n🔗 **Commit:** $COMMIT_HASH\n⚙️ **GitHub Release:** $RELEASE_URL\n📝 **Logs:** $LOGS_URL\"
+            \"content\": \"$ICON **Nightly Build $RESULT**\n\n📱 **Projeto:** Point Tils\n📊 **Status:** ${{ needs.build.result }}\n⚙️ **GitHub Release:** $RELEASE_URL\n📝 **Logs:** ${LOGS_URL:-None}\"
           }" "${{ secrets.DISCORD_WEBHOOK }}"
