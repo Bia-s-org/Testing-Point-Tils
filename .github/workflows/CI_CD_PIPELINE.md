@@ -92,15 +92,9 @@ npm run doctor
 npm run prebuild:clean
 ```
 
-### PR Agent Issues:
-
-- The PR Agent runs only on pull requests
-- Failures are non-blocking (informational only)
-
 ## 📚 Additional Resources
 
 - [Expo Documentation](https://docs.expo.dev/)
 - [React Native Testing Library](https://callstack.github.io/react-native-testing-library/)
 - [ESLint Expo Config](https://docs.expo.dev/guides/using-eslint/)
 - [GitHub Actions](https://docs.github.com/en/actions)
-- [PR Agent Documentation](https://github.com/Codium-ai/pr-agent)
