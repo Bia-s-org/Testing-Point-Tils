@@ -138,7 +138,7 @@ jobs:
 
       - name: Bundle size analysis
         run: |
-          npx expo export --platform web --no-dev
+          npx expo export --platform web
           du -sh dist/ | awk '{print "Bundle size: " $1}'
         continue-on-error: true
 
