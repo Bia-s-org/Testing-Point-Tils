@@ -8,22 +8,17 @@ on:
     branches: [main, develop]
 
 jobs:
-  pr-agent-review:
-    name: PR Agent Review
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+  labeler:
     permissions:
       contents: read
       pull-requests: write
+    runs-on: ubuntu-latest
     steps:
-      - name: Run PR Agent
-        uses: Codium-ai/pr-agent@main
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          github_action_config.auto_review: 'true'
-          github_action_config.auto_describe: 'true'
-          github_action_config.auto_improve: 'false'
-          github_action_config.pr_actions: '["opened", "synchronize", "reopened", "ready_for_review"]'
+      - uses: actions/labeler@v5.0.0
+        with:
+          repo-token: '${{ secrets.GITHUB_TOKEN }}'
+          configuration-path: .github/labeler.yml
+          sync-labels: true
 
   lint-and-typecheck:
     name: Lint and Type Check
