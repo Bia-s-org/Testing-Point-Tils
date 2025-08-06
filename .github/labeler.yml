@@ -1,5 +1,4 @@
 # Labels based on file changes
-
 documentation:
   - changed-files:
       - any-glob-to-any-file: '**/*.md' # Any changes in markdown files
