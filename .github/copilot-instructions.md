@@ -6,10 +6,9 @@ This project, **Point Tils**, is a mobile application built with React Native an
 
 - `/app`: Contains the main application code, including screens and layouts.
 - `/components`: Reusable UI components.
-- `/hooks`: Custom React hooks for shared logic.
+- `/hooks`: Custom React hooks for shared logic, including utilities for theming and color schemes.
 - `/constants`: Shared constants such as colors and configurations.
 - `/assets`: Static assets like images and fonts.
-- `/hooks`: Contains utilities for theming and color schemes.
 - `/app.json`: Expo configuration file.
 - `/eas.json`: Configuration for Expo Application Services (EAS).
 
