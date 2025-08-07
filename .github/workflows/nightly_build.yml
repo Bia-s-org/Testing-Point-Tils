@@ -2,7 +2,7 @@ name: Nightly Build
 
 on:
   schedule:
-    - cron: '0 3 * * *' # 3AM UTC (00:00 BRT no horário de verão)
+    - cron: '0 6 * * *' # 6AM UTC (03:00 BRT)
   workflow_dispatch:
     inputs:
       branch:
