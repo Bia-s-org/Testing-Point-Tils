@@ -13,7 +13,7 @@ dependencies:
 
 # Labels based on branch names
 feature:
-  - head-branch: ['^feature/', 'feature']
+  - head-branch: ['^feat/', 'feat']
 
 bugfix:
-  - head-branch: ['^fix/', 'bug']
+  - head-branch: ['^fix/', 'fix']
