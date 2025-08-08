@@ -9,10 +9,18 @@ on:
         description: 'Branch to build'
         required: false
         default: 'main'
+      profile:
+        description: 'EAS Android build profile'
+        type: choice
+        required: false
+        default: 'preview'
+        options:
+          - preview
+          - production
 
 jobs:
   build:
-    name: Generate Android Build [Preview]
+    name: Generate Android Build
     runs-on: ubuntu-latest
     timeout-minutes: 225 # Both queue and build time (3h45m)
     outputs:
@@ -26,7 +34,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.branch || 'main' }}
+          ref: ${{ github.event.inputs.branch }}
           fetch-depth: 0
 
       - name: Setup Node.js
@@ -92,7 +100,7 @@ jobs:
           echo "🚀 Starting build for version: ${NIGHTLY_VERSION}"
 
           # Capture build ID and URL from JSON output
-          BUILD_JSON=$(eas build --platform android --profile preview --non-interactive --no-wait --json)
+          BUILD_JSON=$(eas build --platform android --profile ${{ github.event.inputs.profile }} --non-interactive --no-wait --json)
           if [ -z "$BUILD_JSON" ]; then
             echo "❌ Failed to start build. Please check your configuration."
             exit 1
@@ -232,7 +240,7 @@ jobs:
         uses: actions/create-release@v1
         with:
           tag_name: v${{ needs.build.outputs.nightly_version }}
-          release_name: ${{ needs.build.outputs.nightly_version }} [Nightly Build]
+          release_name: Point Tils ${{ needs.build.outputs.nightly_version }} [${{ github.event.inputs.profile }}]
           body: |
             ## 🌙 Nightly Build Report
             - **Date:** ${{ env.CURRENT_DATE }}
@@ -242,7 +250,7 @@ jobs:
             ### What's new
             ${{ env.CHANGELOG }}
           draft: false
-          prerelease: true
+          prerelease: ${{ github.event.inputs.profile == 'preview' }}
         env:
           GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
 
